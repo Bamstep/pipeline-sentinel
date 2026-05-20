@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Sentinel — AI Leak Detection System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg:       #080c10;
+  --surface:  #0d1218;
+  --panel:    #111820;
+  --border:   #1a2535;
+  --accent:   #00d4ff;
+  --green:    #00ff88;
+  --red:      #ff3355;
+  --amber:    #ffaa00;
+  --text:     #c8dce8;
+  --dim:      #4a6070;
+  --glow-b:   0 0 20px rgba(0,212,255,0.2);
+  --glow-g:   0 0 20px rgba(0,255,136,0.2);
+  --glow-r:   0 0 20px rgba(255,51,85,0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* SCANLINE OVERLAY */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none; z-index: 1000;
+}
+
+/* HEADER */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 0.7rem;
+}
+
+.logo-icon {
+  width: 36px; height: 36px;
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  box-shadow: var(--glow-b);
+  position: relative;
+  overflow: hidden;
+}
+
+.logo-icon::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(0,212,255,0.1), transparent);
+}
+
+.logo-text {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+}
+
+.logo-text span { color: var(--accent); }
+
+.logo-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  margin-top: 1px;
+}
+
+.header-right {
+  display: flex; align-items: center; gap: 1rem;
+}
+
+.sys-time {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+.sys-badge {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--green);
+  color: var(--green);
+  border-radius: 2px;
+  letter-spacing: 0.1em;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: blink 1s ease infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* MAIN LAYOUT */
+.main {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ALARM BANNER — TOP PRIORITY */
+.alarm-banner {
+  border-radius: 4px;
+  padding: 1.2rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1.5px solid var(--green);
+  background: rgba(0,255,136,0.05);
+  box-shadow: var(--glow-g);
+  transition: all 0.4s ease;
+  animation: bannerIn 0.5s ease both;
+}
+
+@keyframes bannerIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+
+.alarm-banner.alarm {
+  border-color: var(--red);
+  background: rgba(255,51,85,0.08);
+  box-shadow: var(--glow-r);
+  animation: alarmPulse 1.5s ease infinite;
+}
+
+@keyframes alarmPulse {
+  0%,100%{box-shadow: 0 0 20px rgba(255,51,85,0.3)}
+  50%{box-shadow: 0 0 40px rgba(255,51,85,0.6)}
+}
+
+.alarm-left { display: flex; align-items: center; gap: 1rem; }
+
+.alarm-indicator {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(0,255,136,0.1);
+  border: 2px solid var(--green);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  transition: all 0.4s;
+}
+
+.alarm-banner.alarm .alarm-indicator {
+  background: rgba(255,51,85,0.15);
+  border-color: var(--red);
+  animation: spin 0.5s ease;
+}
+
+@keyframes spin { from{transform:rotate(-10deg)} to{transform:rotate(0)} }
+
+.alarm-status {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--green);
+  transition: color 0.4s;
+}
+
+.alarm-banner.alarm .alarm-status { color: var(--red); }
+
+.alarm-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--dim);
+  margin-top: 2px;
+  letter-spacing: 0.08em;
+}
+
+.alarm-location {
+  text-align: right;
+  display: none;
+}
+
+.alarm-banner.alarm .alarm-location { display: block; }
+
+.loc-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+}
+
+.loc-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 0.03em;
+}
+
+.loc-detail {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+/* SENSOR ROW */
+.sensor-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+}
+
+.sensor-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.9rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.sensor-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.sensor-card.alert::before { background: var(--red); opacity: 1; }
+
+.sensor-icon {
+  font-size: 1.1rem;
+  margin-bottom: 0.4rem;
+}
+
+.sensor-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.58rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 0.3rem;
+}
+
+.sensor-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+  transition: color 0.3s;
+}
+
+.sensor-card.alert .sensor-value { color: var(--red); }
+
+.sensor-unit {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--dim);
+  margin-left: 3px;
+}
+
+.sensor-delta {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--dim);
+  margin-top: 0.3rem;
+}
+
+.sensor-delta.down { color: var(--red); }
+.sensor-delta.up { color: var(--amber); }
+.sensor-delta.normal { color: var(--green); }
+
+/* CHARTS */
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.9rem;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.7rem;
+}
+
+.chart-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+}
+
+.chart-val {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+
+canvas { width: 100% !important; display: block; }
+
+/* MODEL SCORES */
+.models-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.model-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.model-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.8rem;
+}
+
+.model-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.05em;
+}
+
+.model-type {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.58rem;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.model-badge {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+  border: 1px solid var(--green);
+  color: var(--green);
+  transition: all 0.3s;
+}
+
+.model-badge.alarm {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(255,51,85,0.1);
+}
+
+.score-bar-wrap {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.score-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  transition: width 0.5s ease;
+}
+
+.score-bar.danger {
+  background: linear-gradient(90deg, var(--amber), var(--red));
+}
+
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.score-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+}
+
+.score-num {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 600;
+  transition: color 0.3s;
+}
+
+.score-num.danger { color: var(--red); }
+
+/* PIPELINE MAP */
+.pipe-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.pipe-card-header {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+}
+
+.pipe-visual {
+  position: relative;
+  padding: 1.5rem 0 1rem;
+}
+
+.pipe-track {
+  height: 20px;
+  background: linear-gradient(180deg, #1a3a5c 0%, #0d2240 50%, #1a3a5c 100%);
+  border-top: 1.5px solid #2a5a8c;
+  border-bottom: 1.5px solid #0a1a2c;
+  border-radius: 2px;
+  position: relative;
+}
+
+.pipe-track::before, .pipe-track::after {
+  content: '';
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  width: 14px; height: 28px;
+  background: #1a2535;
+  border: 1.5px solid #2a4060;
+  border-radius: 2px;
+}
+.pipe-track::before { left: -7px; }
+.pipe-track::after { right: -7px; }
+
+.sensor-pin {
+  position: absolute;
+  top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 3px;
+}
+
+.pin-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 8px var(--accent);
+  z-index: 2;
+}
+
+.pin-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  position: absolute;
+  top: -18px;
+}
+
+.leak-marker {
+  position: absolute;
+  top: 50%; transform: translate(-50%, -50%);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  z-index: 3;
+}
+
+.leak-marker.show { display: flex; }
+
+.leak-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--red);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 12px var(--red);
+  animation: leakPulse 1s ease infinite;
+}
+
+@keyframes leakPulse {
+  0%,100%{box-shadow:0 0 8px var(--red)} 
+  50%{box-shadow:0 0 20px var(--red), 0 0 40px rgba(255,51,85,0.4)}
+}
+
+.leak-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  color: var(--red);
+  white-space: nowrap;
+  position: absolute;
+  top: -18px;
+}
+
+.pipe-stations {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+}
+
+.station-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--dim);
+}
+
+/* CONTROL BAR */
+.control-bar {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.ctrl-btn {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--dim);
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  transition: all 0.2s;
+}
+
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ctrl-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.05); }
+.ctrl-btn.danger { border-color: var(--red); color: var(--red); }
+.ctrl-btn.danger:hover { background: rgba(255,51,85,0.1); }
+
+/* LOG */
+.log-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.9rem;
+}
+
+.log-header {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 0.7rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.log-entries {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  line-height: 1.8;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.log-entry { display: flex; gap: 0.8rem; }
+.log-time { color: var(--dim); flex-shrink: 0; }
+.log-msg { color: var(--text); }
+.log-msg.ok { color: var(--green); }
+.log-msg.warn { color: var(--red); }
+.log-msg.info { color: var(--accent); }
+
+/* FOOTER */
+footer {
+  text-align: center;
+  padding: 1rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .sensor-row { grid-template-columns: repeat(2, 1fr); }
+  .charts-row, .models-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛢️</div>
+    <div>
+      <div class="logo-text">PIPELINE<span>SENTINEL</span></div>
+      <div class="logo-sub">AI LEAK DETECTION SYSTEM v1.0</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="sys-time" id="sysTime">--:--:--</div>
+    <div class="sys-badge"><span class="live-dot"></span>ONLINE</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ALARM BANNER -->
+  <div class="alarm-banner" id="alarmBanner">
+    <div class="alarm-left">
+      <div class="alarm-indicator" id="alarmIcon">✅</div>
+      <div>
+        <div class="alarm-status" id="alarmStatus">NORMAL OPERATION</div>
+        <div class="alarm-sub" id="alarmSub">ALL SENSORS NOMINAL · ENSEMBLE MODELS ACTIVE</div>
+      </div>
+    </div>
+    <div class="alarm-location" id="alarmLocation">
+      <div class="loc-label">LEAK POSITION</div>
+      <div class="loc-value" id="locValue">— m</div>
+      <div class="loc-detail" id="locDetail">from Station A</div>
+    </div>
+  </div>
+
+  <!-- SENSOR CARDS -->
+  <div class="sensor-row">
+    <div class="sensor-card" id="card-p">
+      <div class="sensor-icon">🔵</div>
+      <div class="sensor-name">PRESSURE · P1</div>
+      <div><span class="sensor-value" id="val-p">68.5</span><span class="sensor-unit">bar</span></div>
+      <div class="sensor-delta normal" id="delta-p">● NOMINAL</div>
+    </div>
+    <div class="sensor-card" id="card-f">
+      <div class="sensor-icon">🌊</div>
+      <div class="sensor-name">FLOW RATE · F2</div>
+      <div><span class="sensor-value" id="val-f">145.0</span><span class="sensor-unit">m³/h</span></div>
+      <div class="sensor-delta normal" id="delta-f">● NOMINAL</div>
+    </div>
+    <div class="sensor-card" id="card-t">
+      <div class="sensor-icon">🌡️</div>
+      <div class="sensor-name">TEMPERATURE · T3</div>
+      <div><span class="sensor-value" id="val-t">38.0</span><span class="sensor-unit">°C</span></div>
+      <div class="sensor-delta normal" id="delta-t">● NOMINAL</div>
+    </div>
+    <div class="sensor-card" id="card-a">
+      <div class="sensor-icon">🔊</div>
+      <div class="sensor-name">ACOUSTIC · AE4</div>
+      <div><span class="sensor-value" id="val-a">10.2</span><span class="sensor-unit">dB</span></div>
+      <div class="sensor-delta normal" id="delta-a">● NOMINAL</div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">PRESSURE TREND (bar)</span>
+        <span class="chart-val" id="chartPval">68.5</span>
+      </div>
+      <canvas id="pressureChart" height="80"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">FLOW RATE TREND (m³/h)</span>
+        <span class="chart-val" id="chartFval">145.0</span>
+      </div>
+      <canvas id="flowChart" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- MODEL SCORES -->
+  <div class="models-row">
+    <div class="model-card">
+      <div class="model-header">
+        <div>
+          <div class="model-name">LSTM MODEL</div>
+          <div class="model-type">SUPERVISED · TIME-SERIES CLASSIFIER</div>
+        </div>
+        <div class="model-badge" id="lstmBadge">NOMINAL</div>
+      </div>
+      <div class="score-bar-wrap">
+        <div class="score-bar" id="lstmBar" style="width:3%"></div>
+      </div>
+      <div class="score-row">
+        <span class="score-label">LEAK PROBABILITY</span>
+        <span class="score-num" id="lstmScore">0.030</span>
+      </div>
+    </div>
+    <div class="model-card">
+      <div class="model-header">
+        <div>
+          <div class="model-name">AUTOENCODER</div>
+          <div class="model-type">UNSUPERVISED · RECONSTRUCTION ERROR</div>
+        </div>
+        <div class="model-badge" id="aeBadge">NOMINAL</div>
+      </div>
+      <div class="score-bar-wrap">
+        <div class="score-bar" id="aeBar" style="width:2%"></div>
+      </div>
+      <div class="score-row">
+        <span class="score-label">RECON. ERROR</span>
+        <span class="score-num" id="aeScore">0.00210</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIPELINE MAP -->
+  <div class="pipe-card">
+    <div class="pipe-card-header">PIPELINE SECTION MAP · STATIONS A → B · 15,000 m</div>
+    <div class="pipe-visual">
+      <div class="pipe-track" id="pipeTrack">
+        <!-- Sensor A -->
+        <div class="sensor-pin" style="left:0%">
+          <div class="pin-label">STN-A</div>
+          <div class="pin-dot"></div>
+        </div>
+        <!-- Sensor B -->
+        <div class="sensor-pin" style="left:100%">
+          <div class="pin-label">STN-B</div>
+          <div class="pin-dot"></div>
+        </div>
+        <!-- Leak marker -->
+        <div class="leak-marker" id="leakMarker" style="left:35%">
+          <div class="leak-label" id="leakMapLabel">LEAK</div>
+          <div class="leak-dot">💧</div>
+        </div>
+      </div>
+      <div class="pipe-stations">
+        <span class="station-label">STATION A · 0 m</span>
+        <span class="station-label">STATION B · 15,000 m</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="control-bar">
+    <button class="ctrl-btn active" id="btnMonitor" onclick="toggleMonitoring()">⏸ PAUSE MONITORING</button>
+    <button class="ctrl-btn danger" onclick="triggerTestLeak()">⚠ SIMULATE LEAK</button>
+    <button class="ctrl-btn" onclick="clearAlarm()">✓ CLEAR ALARM</button>
+    <button class="ctrl-btn" onclick="clearLog()">🗑 CLEAR LOG</button>
+  </div>
+
+  <!-- EVENT LOG -->
+  <div class="log-card">
+    <div class="log-header">
+      <span>SYSTEM EVENT LOG</span>
+      <span id="logCount">0 events</span>
+    </div>
+    <div class="log-entries" id="logEntries"></div>
+  </div>
+
+</div>
+
+<footer>
+  PIPELINE SENTINEL v1.0  ·  AI-POWERED LEAK DETECTION  ·  BUILT BY BAMIDELE STEPHEN  ·  TAUGHT BY CLAUDE
+</footer>
+
+<script>
+// ── STATE ──
+let isMonitoring = true;
+let isLeaking = false;
+let leakTimeout = null;
+let tick = 0;
+
+// Sensor baselines
+const BASE = { p: 68.5, f: 145.0, t: 38.0, a: 10.0 };
+let current = { ...BASE };
+
+// Chart data
+const P_DATA = Array(50).fill(68.5);
+const F_DATA = Array(50).fill(145.0);
+
+// ── CLOCK ──
+function updateClock() {
+  document.getElementById('sysTime').textContent =
+    new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── CANVAS CHARTS ──
+function drawChart(id, data, color, min, max, threshold) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const W = canvas.offsetWidth || 300;
+  const H = canvas.height || 80;
+  canvas.width = W;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  // Threshold line
+  if (threshold) {
+    const ty = H - ((threshold - min) / (max - min)) * H;
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,51,85,0.3)';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.moveTo(0, ty); ctx.lineTo(W, ty);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const y = (i / 3) * H;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // Line
+  const step = W / (data.length - 1);
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6;
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = H - ((v - min) / (max - min)) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Fill
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, color.replace(')', ', 0.25)').replace('rgb', 'rgba').replace('#00d4ff','rgba(0,212,255').replace('#00ff88','rgba(0,255,136'));
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+// ── LOG ──
+let logCount = 0;
+function addLog(msg, type='') {
+  const entries = document.getElementById('logEntries');
+  const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="log-time">[${time}]</span><span class="log-msg ${type}">${msg}</span>`;
+  entries.insertBefore(div, entries.firstChild);
+  logCount++;
+  document.getElementById('logCount').textContent = `${logCount} events`;
+}
+
+function clearLog() {
+  document.getElementById('logEntries').innerHTML = '';
+  logCount = 0;
+  document.getElementById('logCount').textContent = '0 events';
+}
+
+// ── ALARM ──
+function setAlarm(active, location_m) {
+  const banner = document.getElementById('alarmBanner');
+  const icon = document.getElementById('alarmIcon');
+  const status = document.getElementById('alarmStatus');
+  const sub = document.getElementById('alarmSub');
+  const locVal = document.getElementById('locValue');
+  const locDetail = document.getElementById('locDetail');
+  const leakMarker = document.getElementById('leakMarker');
+
+  if (active) {
+    banner.classList.add('alarm');
+    icon.textContent = '🚨';
+    status.textContent = 'LEAK DETECTED';
+    sub.textContent = 'ENSEMBLE ALARM · FIELD CREW REQUIRED IMMEDIATELY';
+    locVal.textContent = location_m.toLocaleString() + ' m';
+    const pct = (location_m / 15000) * 100;
+    locDetail.textContent = `${pct.toFixed(1)}% from Station A`;
+    leakMarker.style.left = pct + '%';
+    leakMarker.classList.add('show');
+    document.getElementById('leakMapLabel').textContent = location_m.toLocaleString() + 'm';
+  } else {
+    banner.classList.remove('alarm');
+    icon.textContent = '✅';
+    status.textContent = 'NORMAL OPERATION';
+    sub.textContent = 'ALL SENSORS NOMINAL · ENSEMBLE MODELS ACTIVE';
+    leakMarker.classList.remove('show');
+  }
+}
+
+function clearAlarm() {
+  isLeaking = false;
+  setAlarm(false);
+  ['card-p','card-f','card-t','card-a'].forEach(id => {
+    document.getElementById(id)?.classList.remove('alert');
+  });
+  ['lstmBadge','aeBadge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('alarm'); el.textContent = 'NOMINAL'; }
+  });
+  ['lstmBar','aeBar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('danger'); el.style.width = '3%'; }
+  });
+  ['lstmScore','aeScore'].forEach(id => {
+    document.getElementById(id)?.classList.remove('danger');
+  });
+  addLog('Alarm cleared by operator', 'info');
+}
+
+// ── SENSOR UPDATE ──
+function noise(scale) { return (Math.random() - 0.5) * scale; }
+
+function updateSensors() {
+  if (!isMonitoring) return;
+  tick++;
+
+  let p, f, t, a, lstmProb, aeError;
+
+  if (isLeaking) {
+    p = BASE.p - 4.5 + noise(0.3);
+    f = BASE.f - 12.0 + noise(1.0);
+    t = BASE.t - 0.8 + noise(0.15);
+    a = BASE.a + 25.0 + noise(2.0);
+    lstmProb = 0.88 + Math.random() * 0.1;
+    aeError  = 0.045 + Math.random() * 0.02;
+  } else {
+    p = BASE.p + noise(0.4);
+    f = BASE.f + noise(1.5);
+    t = BASE.t + noise(0.25);
+    a = BASE.a + noise(1.8);
+    lstmProb = 0.02 + Math.random() * 0.04;
+    aeError  = 0.001 + Math.random() * 0.003;
+  }
+
+  current = { p, f, t, a };
+
+  // Update sensor cards
+  const sensors = [
+    { id:'val-p', delta:'delta-p', card:'card-p', val:p, base:BASE.p, unit:'bar', thresh:2.0 },
+    { id:'val-f', delta:'delta-f', card:'card-f', val:f, base:BASE.f, unit:'m³/h', thresh:8.0 },
+    { id:'val-t', delta:'delta-t', card:'card-t', val:t, base:BASE.t, unit:'°C', thresh:0.5 },
+    { id:'val-a', delta:'delta-a', card:'card-a', val:a, base:BASE.a, unit:'dB', thresh:15.0 },
+  ];
+
+  sensors.forEach(({ id, delta, card, val, base, thresh }) => {
+    const diff = val - base;
+    const absDiff = Math.abs(diff);
+    const isAlert = absDiff > thresh;
+
+    document.getElementById(id).textContent = val.toFixed(1);
+    const dEl = document.getElementById(delta);
+    const cEl = document.getElementById(card);
+
+    if (isAlert) {
+      dEl.className = 'sensor-delta down';
+      dEl.textContent = `▼ ${diff.toFixed(2)} DEVIATION`;
+      cEl.classList.add('alert');
+    } else {
+      dEl.className = 'sensor-delta normal';
+      dEl.textContent = '● NOMINAL';
+      cEl.classList.remove('alert');
+    }
+  });
+
+  // Charts
+  P_DATA.push(p); P_DATA.shift();
+  F_DATA.push(f); F_DATA.shift();
+  document.getElementById('chartPval').textContent = p.toFixed(1);
+  document.getElementById('chartFval').textContent = f.toFixed(1);
+  drawChart('pressureChart', P_DATA, '#00d4ff', 60, 75, 64);
+  drawChart('flowChart', F_DATA, '#00ff88', 125, 160, 132);
+
+  // Model scores
+  const lstmPct = lstmProb * 100;
+  const aePct   = Math.min((aeError / 0.08) * 100, 100);
+  const lstmAlarm = lstmProb >= 0.5;
+  const aeAlarm   = aeError >= 0.03;
+  const anyAlarm  = lstmAlarm || aeAlarm;
+
+  document.getElementById('lstmScore').textContent = lstmProb.toFixed(3);
+  document.getElementById('aeScore').textContent   = aeError.toFixed(5);
+  document.getElementById('lstmBar').style.width   = lstmPct + '%';
+  document.getElementById('aeBar').style.width     = aePct + '%';
+
+  if (lstmAlarm) {
+    document.getElementById('lstmBadge').classList.add('alarm');
+    document.getElementById('lstmBadge').textContent = 'ALARM';
+    document.getElementById('lstmBar').classList.add('danger');
+    document.getElementById('lstmScore').classList.add('danger');
+  } else {
+    document.getElementById('lstmBadge').classList.remove('alarm');
+    document.getElementById('lstmBadge').textContent = 'NOMINAL';
+    document.getElementById('lstmBar').classList.remove('danger');
+    document.getElementById('lstmScore').classList.remove('danger');
+  }
+
+  if (aeAlarm) {
+    document.getElementById('aeBadge').classList.add('alarm');
+    document.getElementById('aeBadge').textContent = 'ALARM';
+    document.getElementById('aeBar').classList.add('danger');
+    document.getElementById('aeScore').classList.add('danger');
+  } else {
+    document.getElementById('aeBadge').classList.remove('alarm');
+    document.getElementById('aeBadge').textContent = 'NOMINAL';
+    document.getElementById('aeBar').classList.remove('danger');
+    document.getElementById('aeScore').classList.remove('danger');
+  }
+
+  // Alarm state
+  if (anyAlarm && isLeaking) {
+    // NPW localization: t_A=0, t_B=4.2, L=15000, v=1200
+    const L=15000, v=1200, dt=4.2;
+    const x = Math.round((L - v * dt) / 2);
+    setAlarm(true, x);
+    if (tick % 10 === 0) addLog(`LEAK CONFIRMED · LSTM: ${lstmProb.toFixed(3)} · AE: ${aeError.toFixed(5)} · POS: ${x}m`, 'warn');
+  }
+}
+
+// ── SIMULATE LEAK ──
+function triggerTestLeak() {
+  if (isLeaking) return;
+  isLeaking = true;
+  addLog('⚠ LEAK SIMULATION TRIGGERED by operator', 'warn');
+  addLog('NPW detected · Sensor A: t=0s · Sensor B: t=4.2s', 'info');
+  addLog('Localization running...', 'info');
+  setTimeout(() => {
+    const x = Math.round((15000 - 1200 * 4.2) / 2);
+    addLog(`Leak localized: ${x}m from Station A (${((x/15000)*100).toFixed(1)}% along section)`, 'warn');
+  }, 1200);
+  // Auto clear after 20 seconds
+  clearTimeout(leakTimeout);
+  leakTimeout = setTimeout(() => {
+    isLeaking = false;
+    setAlarm(false);
+    addLog('Leak condition resolved — monitoring resumed', 'ok');
+  }, 20000);
+}
+
+// ── PAUSE / RESUME ──
+function toggleMonitoring() {
+  isMonitoring = !isMonitoring;
+  const btn = document.getElementById('btnMonitor');
+  if (isMonitoring) {
+    btn.textContent = '⏸ PAUSE MONITORING';
+    btn.classList.add('active');
+    addLog('Monitoring resumed', 'ok');
+  } else {
+    btn.textContent = '▶ RESUME MONITORING';
+    btn.classList.remove('active');
+    addLog('Monitoring paused by operator', 'info');
+  }
+}
+
+// ── INIT LOG ──
+addLog('Pipeline Sentinel v1.0 — system online', 'ok');
+addLog('LSTM model loaded · threshold: 0.500', 'info');
+addLog('Autoencoder loaded · threshold: 0.030', 'info');
+addLog('Streaming loop active · interval: 5s', 'ok');
+
+// ── START ──
+setInterval(updateSensors, 1200);
+setTimeout(updateSensors, 100);
+</script>
+</body>
+</html>
